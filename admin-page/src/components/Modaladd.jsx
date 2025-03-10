@@ -18,7 +18,7 @@ const Modaladd = ({ isvisible, onClose }) => {
     const adduser = { nama, username, passwd, ip, alamat, notelp };
   
     try {
-      const response = await axios.post('http://localhost:5000/add_user', adduser);
+      const response = await axios.post('http://10.3.3.120:5000/add_user', adduser);
       console.log(response.data);
       onClose();
       navigate("/table");

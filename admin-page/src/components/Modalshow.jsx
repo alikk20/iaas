@@ -25,7 +25,7 @@ export default function Modalshow({ isVisible, onClose, user }) {
   const handleSave = async () => {
     const updatedUser = { nama, username, passwd, ip, alamat, notelp };
     try {
-      await axios.put(`http://localhost:5000/update_user/${user.id}`, updatedUser);
+      await axios.put(`http://10.3.3.120:5000/update_user/${user.id}`, updatedUser);
       console.log('Data berhasil diperbarui');
       onClose();
     } catch (error) {
@@ -35,7 +35,7 @@ export default function Modalshow({ isVisible, onClose, user }) {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`http://localhost:5000/delete_user/${user.id}`);
+      await axios.delete(`http://10.3.3.120:5000/delete_user/${user.id}`);
       console.log('User berhasil dihapus');
       onClose();
     } catch (error) {

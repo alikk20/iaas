@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import mysql.connector
 import os
 import paramiko
@@ -9,16 +10,14 @@ app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Database Configuration
+# Konfigurasi Database MySQL
 app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST', 'localhost')
 app.config['MYSQL_USER'] = os.getenv('MYSQL_USER', 'admin')
 app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD', 'ali123')
 app.config['MYSQL_DB'] = os.getenv('MYSQL_DB', 'client')
+app.config['JWT_SECRET_KEY'] = "supersecretkey"
 
-# MikroTik Configuration
-MIKROTIK_HOST = os.getenv('MIKROTIK_HOST', '192.168.126.120')
-MIKROTIK_USER = os.getenv('MIKROTIK_USER', 'admin')
-MIKROTIK_PASS = os.getenv('MIKROTIK_PASS', '')
+jwt = JWTManager(app)
 
 # Koneksi ke Database
 def get_db_connection():
@@ -29,78 +28,61 @@ def get_db_connection():
         database=app.config['MYSQL_DB']
     )
 
-# Koneksi ke MikroTik via Paramiko
-def connect_to_mikrotik():
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(MIKROTIK_HOST, username=MIKROTIK_USER, password=MIKROTIK_PASS)
-        return ssh
-    except Exception as e:
-        raise Exception(f"Error connecting to MikroTik: {e}")
+# Konfigurasi MikroTik
+MIKROTIK_HOST = os.getenv('MIKROTIK_HOST', '192.168.126.120')
+MIKROTIK_USER = os.getenv('MIKROTIK_USER', 'admin')
+MIKROTIK_PASS = os.getenv('MIKROTIK_PASS', '')
 
-# Tambah IP ke MikroTik
-def add_ip_to_mikrotik(ip):
-    try:
-        ssh = connect_to_mikrotik()
-        command = f"/ip/address/add address={ip}/24 interface=ether2"
-        stdin, stdout, stderr = ssh.exec_command(command)
-        stdout.channel.recv_exit_status()
-        ssh.close()
-    except Exception as e:
-        raise Exception(f"Error adding IP to MikroTik: {e}")
+# def connect_to_mikrotik():
+#     try:
+#         ssh = paramiko.SSHClient()
+#         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+#         ssh.connect(MIKROTIK_HOST, username=MIKROTIK_USER, password=MIKROTIK_PASS)
+#         return ssh
+#     except Exception as e:
+#         raise Exception(f"Error connecting to MikroTik: {e}")
 
-#@app.route('/change_ssid', methods=['POST'])
-#def change_ssid():
- #   try:
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
 
-#@app.route('/change_passwd', methods=['POST'])
-#def change_passwd():
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "SELECT * FROM admin WHERE username = %s AND password = %s"
+    cursor.execute(query, (username, password))
+    user = cursor.fetchone()
+    cursor.close()
+    connection.close()
 
-#@app.route('/set_dns', methods=['POST'])
-#def set_dns():
+    if not user:
+        return jsonify({"msg": "Username atau password salah!"}), 401
 
-#@app.route('/set_channel', methods=['POST'])
-#def set_channel():
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token)
 
-#@app.route('/show_connection', methods=['GET'])
-#def show_connection():
+@app.route("/protected", methods=["GET"])
+@jwt_required()
+def protected():
+    current_user = get_jwt_identity()
+    return jsonify(logged_in_as=current_user), 200
 
-#
-#
-
-# Tambah User
 @app.route('/add_user', methods=['POST'])
 def add_user():
     try:
         data = request.json
-        nama = data.get('nama')
-        username = data.get('username')
-        passwd = data.get('passwd')
-        ip = data.get('ip')
-        alamat = data.get('alamat')
-        notelp = data.get('notelp')
-
-        if not all([nama, username, passwd, ip, alamat, notelp]):
-            return jsonify({"message": "Semua data wajib diisi!"}), 400
-
+        nama, username, passwd, ip, alamat, notelp = data.values()
+        
         connection = get_db_connection()
         with connection.cursor() as cursor:
-            query = """
-                INSERT INTO users (nama, username, passwd, ip, alamat, notelp)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """
+            query = "INSERT INTO users (nama, username, passwd, ip, alamat, notelp) VALUES (%s, %s, %s, %s, %s, %s)"
             cursor.execute(query, (nama, username, passwd, ip, alamat, notelp))
             connection.commit()
-
-        return jsonify({"message": "Data berhasil ditambahkan!"}), 201
-
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error database: {err}"}), 500
+        return jsonify({"message": "User berhasil ditambahkan!"}), 201
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
-# Get User
 @app.route('/get_users', methods=['GET'])
 def get_users():
     try:
@@ -109,11 +91,9 @@ def get_users():
             cursor.execute("SELECT * FROM users")
             users = cursor.fetchall()
         return jsonify(users), 200
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
 
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error database: {err}"}), 500
-
-# Update User
 @app.route('/update_user/<int:user_id>', methods=['PUT'])
 def update_users(user_id):
     try:
@@ -133,55 +113,36 @@ def update_users(user_id):
             socketio.emit('update_user')
 
         return jsonify({"message": "User berhasil diperbarui!"}), 200
-
     except mysql.connector.Error as err:
         return jsonify({"message": f"Error Database: {err}"}), 500
-
-# Delete User
+    
 @app.route('/delete_user/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
     try:
         connection = get_db_connection()
-        
         with connection.cursor() as cursor:
-            sql = "DELETE FROM users WHERE id=%s"
-            cursor.execute(sql, (user_id,))
+            cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
             connection.commit()
-            
             socketio.emit('delete_user')
-        
         return jsonify({"message": "User berhasil dihapus!"}), 200
-    
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error Database: {err}"}), 500
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
 
-# Tambah PAket
 @app.route('/add_paket', methods=['POST'])
 def add_paket():
     try:
         data = request.json
-        nama = data.get('nama')
-        kecepatan = data.get('kecepatan')
-        harga = data.get('harga')
-        masa_aktif = data.get('masa_aktif')
-
-        if not all([nama, kecepatan, harga, masa_aktif]):
-            return jsonify({"message": "Wajib diisi"}), 400
-
+        nama, kecepatan, harga, masa_aktif = data.values()
+        
         connection = get_db_connection()
-
         with connection.cursor() as cursor:
-            query = """INSERT INTO paket (nama, kecepatan, harga, masa_aktif) 
-                       VALUES (%s, %s, %s, %s)"""
+            query = "INSERT INTO paket (nama, kecepatan, harga, masa_aktif) VALUES (%s, %s, %s, %s)"
             cursor.execute(query, (nama, kecepatan, harga, masa_aktif))
             connection.commit()
+        return jsonify({"message": "Paket berhasil ditambahkan!"}), 201
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
 
-        return jsonify({"message": "Success added"}), 201
-
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error: {err}"}), 500
-
-# Get Paket
 @app.route('/get_paket', methods=['GET'])
 def get_paket():
     try:
@@ -190,11 +151,9 @@ def get_paket():
             cursor.execute("SELECT * FROM paket")
             paket = cursor.fetchall()
         return jsonify(paket), 200
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
 
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error database: {err}"}), 500
-
-# Update Paket
 @app.route('/update_paket/<int:paket_id>', methods=['PUT'])
 def update_paket(paket_id):
     try:
@@ -215,12 +174,9 @@ def update_paket(paket_id):
             socketio.emit('update_paket')
 
         return jsonify({"message": "Paket berhasil diperbarui!"}), 200
-
     except mysql.connector.Error as err:
-
         return jsonify({"message": f"Error Database: {err}"}), 500
 
-# Delete Paket
 @app.route('/delete_paket/<int:paket_id>', methods=['DELETE'])
 def delete_paket(paket_id):
     try:
@@ -234,10 +190,9 @@ def delete_paket(paket_id):
             socketio.emit('delete_paket')
         
         return jsonify({"message": "Paket berhasil dihapus!"}), 200
-    
     except mysql.connector.Error as err:
         return jsonify({"message": f"Error Database: {err}"}), 500
 
 # Jalankan Flask
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="10.3.3.120", debug=True)

@@ -47,4 +47,4 @@ def protected():
     return jsonify(logged_in_as=current_user), 200
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(host="10.3.3.120", debug=True, port=5001)

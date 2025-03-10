@@ -22,7 +22,7 @@ export default function Paket() {
   // Fetch Data
   const fetchData = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/get_paket');
+      const response = await axios.get('http://10.3.3.120:5000/get_paket');
       setPaket(response.data);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -34,7 +34,7 @@ export default function Paket() {
   }, []);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const socket = io('http://10.3.3.120:5000');
 
     const handleUpdate = () => fetchData();
     socket.on('update_paket', handleUpdate);

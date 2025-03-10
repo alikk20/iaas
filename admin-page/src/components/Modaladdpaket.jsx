@@ -16,7 +16,7 @@ const Modaladdpaket = ({ visible, onClose }) => {
     const addPaket = { nama, kecepatan, harga, masa_aktif };
   
     try {
-      const response = await axios.post('http://localhost:5000/add_paket', addPaket);
+      const response = await axios.post('http://10.3.3.120:5000/add_paket', addPaket);
       console.log(response.data);
       
       setNama('');

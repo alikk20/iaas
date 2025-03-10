@@ -21,7 +21,7 @@ export default function Modalshow({ Visible, onClose, paket }) {
   const handleSave = async () => {
     const updatedPaket = { nama, kecepatan, harga, masa_aktif};
     try {
-      await axios.put(`http://localhost:5000/update_paket/${paket.id}`, updatedPaket);
+      await axios.put(`http://10.3.3.120:5000/update_paket/${paket.id}`, updatedPaket);
       console.log('Data paket berhasil diperbarui');
       onClose();
     } catch (error) {
@@ -31,7 +31,7 @@ export default function Modalshow({ Visible, onClose, paket }) {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`http://localhost:5000/delete_paket/${paket.id}`);
+      await axios.delete(`http://10.3.3.120:5000/delete_paket/${paket.id}`);
       console.log('Paket berhasil dihapus');
       onClose();
     } catch (error) {
